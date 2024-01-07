@@ -52,6 +52,16 @@ import os
 ###################################################
 
 
+def sign(x):
+    if x > 0:
+        return 1
+    elif x < 0:
+        return -1
+    return 0
+
+DX = [0, 0, -1, 1]
+DY = [-1, 1, 0, 0]
+
 class GameState:
     """
     A GameState specifies the full game state, including the food, capsules,
@@ -70,6 +80,114 @@ class GameState:
     ####################################################
     # Accessor methods: use these to access state data #
     ####################################################
+    
+    def getNearestManhattanGhost(self):
+        return min(self.getGhostPositions(), key=lambda ghost: manhattanDistance(self.getPacmanPosition(), ghost))
+    
+    def getNearestManhattanFood(self):
+        pacman_pos = self.getPacmanPosition()
+        food = self.getFood()
+
+        min_x = None
+        min_y = None
+        min_dist = None
+        for x in range(food.width):
+            for y in range(food.height):
+                if not food[x][y]:
+                    continue
+                current_dist = manhattanDistance(pacman_pos, (x, y))
+                if not min_dist or current_dist < min_dist:
+                    min_dist = current_dist
+                    min_x, min_y = x, y
+        
+        return (min_x, min_y)
+
+    def getIsGhostNear(self):
+        return min(manhattanDistance(self.getPacmanPosition(), ghost) for ghost in self.getGhostPositions()) > 2
+    
+    def getDiscreteManhattanDist(self, first, second, delim=10):
+        return manhattanDistance(first, second) // delim
+    
+    def getManhattanDir(self, first, second):
+        return (sign(first[0] - second[0]), sign(first[1] - second[1]))
+    
+    def getNearestManhattanGhostDir(self):
+        return self.getManhattanDir(self.getPacmanPosition(), self.getNearestManhattanGhost())
+    
+    def getNearestManhattanFoodDir(self):
+        return self.getManhattanDir(self.getPacmanPosition(), self.getNearestManhattanFood())
+    
+    def getNearestManhattanFoodDiscreteDist(self):
+        return self.getDiscreteManhattanDist(self.getPacmanPosition(), self.getNearestManhattanFood())
+    
+    def getNearestManhattanGhostDiscreteDist(self):
+        return self.getDiscreteManhattanDist(self.getPacmanPosition(), self.getNearestManhattanGhost())
+    
+    def getAllManhattanGhostDiscreteDist(self):
+        return tuple(self.getDiscreteManhattanDist(self.getPacmanPosition(), ghost) for ghost in self.getGhostPositions())
+    
+    def getAllManhattanGhostDirs(self):
+        return tuple(self.getManhattanDir(self.getPacmanPosition(), ghost) for ghost in self.getGhostPositions())
+    
+    def getBfsDists(self, queue):
+        walls = self.getWalls()
+        dists = []
+        for row in walls:
+            dists.append([1e9] * len(row))
+        
+        for x, y in queue:
+            dists[x][y] = 0
+        
+        while queue:
+            x, y = queue[0]
+            queue.pop(0)
+
+            for dx, dy in zip(DX, DY):
+                new_x, new_y = x + dx, y + dy
+                if walls[new_x][new_y]:
+                    continue
+                if dists[x][y] + 1 < dists[new_x][new_y]:
+                    dists[new_x][new_y] = dists[x][y] + 1
+                    queue.append((new_x, new_y))
+        
+        return dists
+    
+    def getBfsDir(self, queue):
+        dists = self.getBfsDists(queue)
+
+        x, y = self.getPacmanPosition()
+        min_dist = None
+        min_dx, min_dy = None, None
+        for dx, dy in zip(DX, DY):
+            if not min_dist or dists[x + dx][y + dy] < min_dist:
+                min_dist = dists[x + dx][y + dy]
+                min_dx, min_dy = dx, dy
+        
+        return (min_dx, min_dy)
+    
+    def getNearestManhattanFoodBFSDir(self):
+        nearest_food = self.getNearestManhattanFood()
+        return self.getBfsDir([nearest_food])
+    
+    def getNearestManhattanGhostBFSDir(self):
+        x, y = self.getNearestManhattanGhost()
+        return self.getBfsDir([(int(x), int(y))])
+        
+    def getWallsAround(self):
+        x, y = self.getPacmanPosition()
+        walls_map = self.getWalls()
+        walls_around = [True] * len(DX)
+        for idx, (dx, dy) in enumerate(zip(DX, DY)):
+            if walls_map[x + dx][y + dy]:
+                walls_around[idx] = True
+
+        return tuple(walls_around)
+    
+    def getIsAllScared(self):
+        return min(ghost.scaredTimer for ghost in self.getGhostStates()) > 0
+    
+    def getPos(self):
+        return self.getPacmanPosition()
 
     def getLegalActions(self, agentIndex=0):
         """
